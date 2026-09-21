@@ -1,0 +1,16 @@
+[package]
+name = "reasm"
+version = "0.1.0"
+edition = "2021"
+description = "网络会话重组台：离线 pcap/确定性帧夹具的 TCP 会话重组本地服务"
+
+[lib]
+name = "reasm"
+path = "src/lib.rs"
+
+[[bin]]
+name = "reasm"
+path = "src/main.rs"
+
+[profile.dev]
+opt-level = 0

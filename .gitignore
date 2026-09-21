@@ -34,3 +34,10 @@ coverage/
 .vite/
 .turbo/
 *.tsbuildinfo
+
+# 网络会话重组台运行期数据目录
+/reasm-data/
+/target/test-store-*
+/target/test-sample-*
+/target/test-http-*
+/target/test-bad-*

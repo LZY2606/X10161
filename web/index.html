@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>网络会话重组台</title>
+<style>
+:root {
+  --bg: #0f1419;
+  --panel: #161d26;
+  --panel2: #1c2530;
+  --border: #2a3644;
+  --text: #d7e0ea;
+  --muted: #8295a8;
+  --accent: #4aa8ff;
+  --green: #43c08a;
+  --amber: #e0a13d;
+  --red: #e06c6c;
+  --purple: #b084f5;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+header h1 { font-size: 18px; margin: 0; font-weight: 650; }
+header .sub { color: var(--muted); font-size: 12px; }
+main { display: grid; grid-template-columns: 360px 1fr; gap: 0; min-height: calc(100vh - 57px); }
+aside {
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  padding: 14px;
+  overflow-y: auto;
+  max-height: calc(100vh - 57px);
+}
+section.content { padding: 16px 20px; overflow-y: auto; max-height: calc(100vh - 57px); }
+.card { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.card h3 { margin: 0 0 10px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+button, select, input[type=text], input[type=number] {
+  background: #0d1218;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+button { cursor: pointer; }
+button.primary { background: #14314d; border-color: #2c5d8a; color: #cfe7ff; }
+button.primary:hover { background: #1b4063; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+input[type=file] { font-size: 12px; color: var(--muted); width: 100%; }
+label.field { font-size: 12px; color: var(--muted); display: block; margin: 6px 0 3px; }
+.muted { color: var(--muted); font-size: 12px; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); }
+.pill.full { color: var(--green); border-color: #285c45; }
+.pill.partial { color: var(--amber); border-color: #6b5026; }
+.pill.syn { color: var(--accent); border-color: #284a6b; }
+.pill.rst { color: var(--red); border-color: #6b2e2e; }
+.pill.fin { color: var(--purple); border-color: #4a3a6b; }
+.pill.timeout { color: var(--muted); }
+.pill.reused { color: var(--amber); border-color: #6b5026; }
+.session {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  overflow: hidden;
+}
+.session .head { padding: 9px 11px; }
+.session .head:hover { background: #202b38; }
+.session.active { border-color: var(--accent); }
+.session .tuple { font-family: var(--mono); font-size: 11px; color: var(--muted); word-break: break-all; }
+.generation { border-top: 1px solid var(--border); padding: 8px 11px; font-size: 12px; }
+.generation.active { background: #12202f; }
+.gtags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
+.section-title { font-size: 15px; margin: 0 0 4px; }
+.kv { display: grid; grid-template-columns: 150px 1fr; gap: 3px 12px; font-size: 12px; }
+.kv .k { color: var(--muted); }
+.dirblock { border: 1px solid var(--border); border-radius: 8px; margin: 10px 0; }
+.dirhead { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: #1a232e; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.dirhead b { font-family: var(--mono); }
+.coverage { padding: 10px 12px; }
+.scalebar { position: relative; height: 22px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: #0b0f14; }
+.cell-seg { height: 100%; }
+.legend { display: flex; gap: 14px; margin-top: 7px; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+table.segs { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+table.segs th, table.segs td { padding: 4px 8px; border-bottom: 1px solid #232e3a; text-align: left; white-space: nowrap; }
+table.segs th { color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--panel2); }
+.tag-re { color: var(--amber); }
+.tag-oo { color: var(--purple); }
+.tag-po { color: var(--red); }
+.tag-ok { color: var(--green); }
+pre.bytes {
+  background: #0b0f14; border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px; max-height: 140px; overflow: auto; margin: 6px 0 0;
+  font-family: var(--mono); font-size: 11px; white-space: pre-wrap; word-break: break-all;
+}
+.toast { position: fixed; bottom: 18px; right: 18px; background: #20303f; border: 1px solid var(--border); padding: 10px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.show { opacity: 1; }
+.small { font-size: 11px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.scrollx { overflow-x: auto; }
+.qbox { border: 1px dashed #6b5026; background: #241d12; border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #e7c58f; margin: 6px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>网络会话重组台</h1>
+  <span class="sub">离线 pcap / 确定性帧夹具 · TCP 双向会话重组 · 本地服务，不访问网卡</span>
+</header>
+<main>
+  <aside>
+    <div class="card">
+      <h3>1 · 导入抓包</h3>
+      <input type="file" id="file" accept=".pcap,.json,application/octet-stream">
+      <div class="row" style="margin-top:8px">
+        <button class="primary" id="uploadBtn">上传并解析</button>
+        <button id="sampleBtn">载入示例夹具</button>
+      </div>
+      <div class="muted" id="uploadInfo">支持经典 libpcap（.pcap）或 reasm 夹具 JSON</div>
+    </div>
+
+    <div class="card">
+      <h3>2 · 分析版本</h3>
+      <label class="field">重叠策略</label>
+      <select id="overlap">
+        <option value="first-seen">first-seen（先到字节保留）</option>
+        <option value="last-seen">last-seen（后到字节覆盖）</option>
+      </select>
+      <label class="field">空闲超时（毫秒，决定同四元组代次）</label>
+      <input type="number" id="timeoutMs" value="120000" step="1000" style="width:100%">
+      <div class="row" style="margin-top:8px">
+        <button class="primary" id="analyzeBtn" disabled>生成分析版本</button>
+      </div>
+      <div class="muted">策略/参数变化会产生新分析版本，旧版本保留不覆盖。</div>
+    </div>
+
+    <div class="card">
+      <h3>3 · 会话筛选</h3>
+      <input type="text" id="filter" placeholder="按端点 / 四元组 / 状态过滤" style="width:100%">
+      <div class="row" style="margin-top:8px">
+        <select id="stateFilter" style="flex:1">
+          <option value="all">全部状态</option>
+          <option value="partial">partial 中途抓取</option>
+          <option value="rst">RST 结束</option>
+          <option value="fin">FIN 优雅关闭</option>
+          <option value="timeout">超时断代</option>
+          <option value="reused">四元组复用</option>
+          <option value="gaps">存在缺口</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>分析历史</h3>
+      <div id="history" class="muted">暂无</div>
+    </div>
+
+    <div class="card" id="captureListCard">
+      <h3>已保存抓包</h3>
+      <div id="captureList" class="muted">加载中…</div>
+    </div>
+  </aside>
+
+  <section class="content">
+    <div id="detail"><div class="muted">请上传夹具或载入示例，然后生成分析版本。</div></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+"use strict";
+
+const state = {
+  capture: null,
+  evidence: null,
+  analysis: null,
+  selected: null, // session id
+  expandedGen: null,
+};
+
+const $ = (id) => document.getElementById(id);
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove("show"), 2600);
+}
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const text = await r.text();
+  let data;
+  try { data = JSON.parse(text); } catch (e) { data = text; }
+  if (!r.ok) throw new Error((data && data.error) || r.statusText);
+  return data;
+}
+
+$("sampleBtn").onclick = async () => {
+  const txt = await (await fetch("/api/sample")).text();
+  uploadBytes(new Blob([txt], {type: "application/json"}), "sample.fixture.json");
+};
+$("uploadBtn").onclick = () => {
+  const f = $("file").files[0];
+  if (!f) return toast("请先选择文件");
+  uploadBytes(f, f.name);
+};
+async function uploadBytes(blob, name) {
+  const fd = new FormData();
+  fd.append("file", blob, name);
+  try {
+    const c = await api("/api/captures", {method: "POST", body: fd});
+    state.capture = c;
+    $("uploadInfo").innerHTML = "抓包 <span class='mono'>" + c.capture_id.slice(0,12) +
+      "</span> · " + c.frame_count + " 帧 · " + c.source_kind;
+    $("analyzeBtn").disabled = false;
+    toast("导入成功：" + c.frame_count + " 帧");
+    refreshCaptures();
+  } catch (e) { toast("导入失败：" + e.message); }
+}
+
+$("analyzeBtn").onclick = async () => {
+  if (!state.capture) return;
+  const body = JSON.stringify({
+    capture_id: state.capture.capture_id,
+    overlap: $("overlap").value,
+    idle_timeout_us: Number($("timeoutMs").value) * 1000,
+  });
+  try {
+    const a = await api("/api/analyze", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body,
+    });
+    state.analysis = a;
+    const ev = await api("/api/evidence?id=" + encodeURIComponent(a.analysis_id));
+    state.evidence = ev;
+    state.selected = (ev.sessions[0] || {}).session_id || null;
+    state.expandedGen = null;
+    render();
+    refreshHistory();
+    toast("分析完成，指纹 " + a.fingerprint.slice(0, 12));
+  } catch (e) { toast("分析失败：" + e.message); }
+};
+
+async function refreshCaptures() {
+  const data = await api("/api/captures");
+  const el = $("captureList");
+  if (!data.captures.length) { el.innerHTML = "<span class=muted>暂无</span>"; return; }
+  el.innerHTML = data.captures.map(c =>
+    "<div class='small mono' style='margin:3px 0'><a href='/api/capture/source?id=" +
+    encodeURIComponent(c.capture_id) + "' title='下载规范化 pcap'>" +
+    c.capture_id.slice(0,12) + "</a> <span class='muted'>" + c.frame_count + " 帧</span></div>"
+  ).join("");
+}
+async function refreshHistory() {
+  const cid = state.capture ? state.capture.capture_id : null;
+  const data = await api("/api/analyses" + (cid ? "?capture_id=" + encodeURIComponent(cid) : ""));
+  const el = $("history");
+  if (!data.analyses.length) { el.innerHTML = "<span class=muted>暂无</span>"; return; }
+  el.innerHTML = data.analyses.slice().reverse().map(a =>
+    "<div style='margin:4px 0'><a href='#' data-aid='" + a.analysis_id + "' class='hist'>" +
+    a.analysis_id.slice(0,10) + "</a> <span class='pill " +
+    (a.overlap === "last-seen" ? "reused" : "full") + "'>" + a.overlap + "</span><br>" +
+    "<span class='mono small muted'>" + a.fingerprint.slice(0,16) + "</span></div>"
+  ).join("");
+  el.querySelectorAll(".hist").forEach(a => a.onclick = async (ev) => {
+    ev.preventDefault();
+    const aid = a.dataset.aid;
+    const meta = data.analyses.find(x => x.analysis_id === aid);
+    state.analysis = meta;
+    state.evidence = await api("/api/evidence?id=" + encodeURIComponent(aid));
+    $("overlap").value = meta.overlap;
+    $("timeoutMs").value = Math.round(meta.idle_timeout_us / 1000);
+    state.selected = (state.evidence.sessions[0] || {}).session_id || null;
+    render();
+  });
+}
+
+$("filter").oninput = renderSessionList;
+$("stateFilter").onchange = renderSessionList;
+
+function render() { renderSessionList(); renderDetail(); }
+
+function sessionMatchesFilter(sess, gen) {
+  const q = $("filter").value.trim().toLowerCase();
+  const st = $("stateFilter").value;
+  const hay = (sess.four_tuple + " " + sess.endpoint_a + " " + sess.endpoint_b).toLowerCase();
+  if (q && !hay.includes(q)) return false;
+  const reason = gen.close && gen.close.reason;
+  const hasGaps = ["A","B"].some(d => {
+    const dir = gen.directions[d];
+    return dir && dir.present && dir.gaps.length > 0;
+  });
+  if (st === "partial" && gen.handshake !== "partial") return false;
+  if (st === "rst" && reason !== "rst") return false;
+  if (st === "fin" && reason !== "fin") return false;
+  if (st === "timeout" && reason !== "timeout") return false;
+  if (st === "reused" && reason !== "reused" && sess.generations.length < 2) return false;
+  if (st === "gaps" && !hasGaps) return false;
+  return true;
+}
+
+function renderSessionList() {
+  if (!state.evidence) return;
+  const detail = $("detail");
+  const wrap = document.createElement("div");
+  const ev = state.evidence;
+  const visible = [];
+  const html = ev.sessions.map(sess => {
+    const gens = sess.generations.filter(g => sessionMatchesFilter(sess, g));
+    if (!gens.length) return "";
+    visible.push(sess.session_id);
+    return "<div class='session" + (state.selected === sess.session_id ? " active" : "") +
+      "' data-sid='" + sess.session_id + "'>" +
+      "<div class='head'><div><b>" + sess.session_id + "</b> · " +
+      sess.generations.length + " 代</div>" +
+      "<div class='tuple'>" + sess.four_tuple + "</div></div></div>";
+  }).join("");
+  // 侧栏列表渲染到独立容器：这里复用 detail 下方没有侧栏容器，故插入到筛选卡后
+  let listEl = document.getElementById("sessionListDynamic");
+  if (!listEl) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.id = "sessionListCard";
+    card.innerHTML = "<h3>会话 (" + visible.length + ")</h3><div id='sessionListDynamic'></div>";
+    $("filter").closest(".card").after(card);
+    listEl = document.getElementById("sessionListDynamic");
+  }
+  listEl.innerHTML = html || "<div class='muted'>无匹配会话</div>";
+  listEl.querySelectorAll(".session").forEach(el => el.onclick = () => {
+    state.selected = el.dataset.sid;
+    state.expandedGen = null;
+    render();
+  });
+}
+
+function renderDetail() {
+  const el = $("detail");
+  if (!state.evidence || !state.selected) {
+    el.innerHTML = "<div class='muted'>请选择一个会话。</div>";
+    return;
+  }
+  const sess = state.evidence.sessions.find(s => s.session_id === state.selected);
+  if (!sess) { el.innerHTML = "<div class='muted'>会话不存在。</div>"; return; }
+  const aid = state.analysis.analysis_id;
+
+  let html = "<div class='row' style='justify-content:space-between'>" +
+    "<h2 class='section-title'>" + sess.session_id + " · 四元组复用 " +
+    sess.generations.length + " 代</h2>" +
+    "<div class='row'><a class='pill fin' target='_blank' href='/api/evidence?id=" +
+    encodeURIComponent(aid) + "&download=1'>下载全部证据 JSON</a></div></div>" +
+    "<div class='kv'><div class='k'>四元组（方向无关）</div><div class='mono'>" +
+    sess.four_tuple + "</div>" +
+    "<div class='k'>端点 A</div><div class='mono'>" + sess.endpoint_a + "</div>" +
+    "<div class='k'>端点 B</div><div class='mono'>" + sess.endpoint_b + "</div></div>";
+
+  sess.generations.forEach((g, idx) => {
+    const open = state.expandedGen === g.generation_id ||
+      (state.expandedGen === null && idx === sess.generations.length - 1);
+    const close = g.close || {state: "open"};
+    const closePill = close.state === "closed"
+      ? "<span class='pill " + close.reason + "'>" + closeLabel(close.reason) + "</span>"
+      : "<span class='pill syn'>open</span>";
+    const hsPill = "<span class='pill " + handshakeClass(g.handshake) + "'>握手：" +
+      handshakeLabel(g.handshake) + "</span>";
+    html += "<div class='dirblock'><div class='dirhead' data-gid='" + g.generation_id +
+      "' style='cursor:pointer'><b>" + g.generation_id + "</b>" + hsPill + closePill +
+      "<span class='muted small'>发起方 " + (g.initiator || "未知（partial）") +
+      " · " + segCount(g) + " 个 TCP 段</span></div>";
+    if (open) html += renderGeneration(g, aid);
+    html += "</div>";
+  });
+  el.innerHTML = html;
+  el.querySelectorAll(".dirhead[data-gid]").forEach(h => h.onclick = () => {
+    state.expandedGen = state.expandedGen === h.dataset.gid ? "__none__" : h.dataset.gid;
+    renderDetail();
+  });
+}
+
+function closeLabel(r) {
+  return {rst: "RST 结束", fin: "FIN 优雅关闭", timeout: "超时断代", reused: "被复用抢占"}[r] || r;
+}
+function handshakeLabel(h) {
+  return {full: "完整三次握手", "syn-observed": "仅见到 SYN", partial: "partial（无握手）"}[h] || h;
+}
+function handshakeClass(h) {
+  return {full: "full", "syn-observed": "syn", partial: "partial"}[h] || "syn";
+}
+function segCount(g) {
+  return ["A","B"].reduce((n, d) => n + ((g.directions[d] && g.directions[d].segments) || []).length, 0);
+}
+
+function renderGeneration(g, aid) {
+  let html = "<div style='padding:10px 12px'>";
+  html += "<div class='muted small'>关单事件（FIN/RST 同时间戳按原始帧序号）：" +
+    (g.close_events.length
+      ? g.close_events.map(e => "#" + e.frame + " " + e.endpoint +
+          (e.fin ? " FIN" : "") + (e.rst ? " RST" : "")).join("；")
+      : "无") + "</div>";
+  ["A", "B"].forEach(d => { html += renderDir(g, d, aid); });
+  html += "</div>";
+  return html;
+}
+
+function renderDir(g, d, aid) {
+  const dir = g.directions[d];
+  if (!dir || !dir.present) {
+    return "<div class='qbox'>方向 " + d + "：该代次无报文（" + dir.endpoint + "）</div>";
+  }
+  const scale = coverageScale(dir);
+  let html = "<div class='coverage'><div class='dirhead' style='padding:0 0 8px;border:none;background:transparent'>" +
+    "<b>方向 " + d + "</b> <span class='mono small muted'>" + dir.endpoint + "</span>" +
+    "<span class='muted small'>base_seq=" + (dir.base_seq === null ? "未知" : dir.base_seq) +
+    "（帧 #" + (dir.base_frame === null ? "-" : dir.base_frame) + "）</span>" +
+    "<a class='pill full' target='_blank' href='/api/stream?id=" + encodeURIComponent(aid) +
+    "&session=" + encodeURIComponent(g.generation_id) + "&dir=" + d + "'>下载重组字节 (" +
+    dir.delivered_length + " B)</a></div>";
+
+  html += "<div class='scalebar'>" + scale + "</div>";
+  html += "<div class='legend'>" +
+    "<span><i class='sw' style='background:#2e6f4e'></i>连续已交付</span>" +
+    "<span><i class='sw' style='background:#1f5c39'></i>已覆盖（缺口之后）</span>" +
+    "<span><i class='sw' style='background:#2a3644'></i>缺口</span>" +
+    "<span><i class='sw' style='background:#7a4b9e'></i>乱序到达</span>" +
+    "<span><i class='sw' style='background:#a8702f'></i>重传/覆盖</span></div>";
+
+  html += "<div class='kv' style='margin-top:8px'>" +
+    "<div class='k'>观察序号区间</div><div class='mono'>" +
+    (dir.observed ? dir.observed.seq_min + " → " + dir.observed.next_max +
+      "（跨度 " + dir.observed.length_span + "）" : "—") + "</div>" +
+    "<div class='k'>连续前缀</div><div class='mono'>" + dir.delivered_length + " 字节</div>" +
+    "<div class='k'>累计见到</div><div class='mono'>" + dir.total_seen_bytes + " 字节</div>" +
+    "<div class='k'>缺口</div><div>" +
+    (dir.gaps.length
+      ? dir.gaps.map(x => "<span class='qbox' style='display:inline-block;margin:2px;padding:2px 8px'>[" +
+          x.start + "," + x.end + ") 长 " + x.length + "</span>").join(" ")
+      : "<span class='tag-ok'>无</span>") + "</div>" +
+    "<div class='k'>SYN / FIN / RST</div><div>" +
+    [dir.syn_seen && "SYN", dir.fin_seen && "FIN", dir.rst_seen && "RST"].filter(Boolean).join(" / ") || "—" +
+    "</div>" +
+    "<div class='k'>校验和异常帧</div><div class='mono'>" +
+    (dir.checksum_bad_frames.length ? dir.checksum_bad_frames.join(", ") : "无") + "</div></div>";
+
+  html += renderSegments(dir);
+  html += "</div>";
+  return html;
+}
+
+function coverageScale(dir) {
+  // 以相对空间（0..最大覆盖端）画线，缺口留容器深色。
+  const maxRel = Math.max(dir.delivered_length,
+    ...dir.covered_runs.map(r => r.end), 1);
+  const pct = (x) => (x / maxRel * 100);
+  let blocks = "";
+  dir.covered_runs.forEach(r => {
+    const dark = r.start >= dir.delivered_length;
+    blocks += "<div class='cell-seg' style='position:absolute;top:0;bottom:0;left:" +
+      pct(r.start).toFixed(3) + "%;width:" + pct(r.end - r.start).toFixed(3) +
+      "%;background:" + (dark ? "#1f5c39" : "#2e6f4e") + "'></div>";
+  });
+  // 乱序（紫）/重传重叠（橙）半透明覆盖标记。
+  dir.segments.forEach(seg => {
+    if (seg.rel_start === null || seg.data_len === 0) return;
+    let color = null;
+    if (seg.retransmit || seg.partial_overlap) color = "rgba(224,161,61,.55)";
+    else if (seg.out_of_order) color = "rgba(176,132,245,.55)";
+    if (color) {
+      blocks += "<div style='position:absolute;top:0;bottom:0;left:" +
+        pct(seg.rel_start).toFixed(3) + "%;width:" +
+        pct(seg.data_len).toFixed(3) + "%;background:" + color + "'></div>";
+    }
+  });
+  return blocks;
+}
+function renderSegments(dir) {
+  const segs = dir.segments.slice().sort((a, b) => a.ts_us - b.ts_us || a.frame - b.frame);
+  let rows = segs.map(s => {
+    const tags = [];
+    if (s.retransmit) tags.push("<span class='tag-re'>重传</span>");
+    if (s.out_of_order) tags.push("<span class='tag-oo'>乱序</span>");
+    if (s.partial_overlap) tags.push("<span class='tag-po'>部分重叠</span>");
+    if (!tags.length) tags.push("<span class='tag-ok'>新数据</span>");
+    const coll = (s.collisions || []).slice(0, 4).map(c =>
+      "@" + c.offset + ": 0x" + c.old_byte.toString(16) + "→0x" + c.new_byte.toString(16) +
+      " (帧#" + c.old_frame + "→#" + c.new_frame + (c.replaced ? ",已覆盖" : ",保留原值") + ")").join("<br>");
+    return "<tr><td>#" + s.frame + "</td><td>" + fmtTs(s.ts_us) + "</td><td class='mono'>" +
+      uint32(s.seq) + "</td><td>" + s.data_len + "</td><td>" + s.flags + "</td>" +
+      "<td>" + (s.rel_start === null ? "—" : s.rel_start + "…" + s.rel_end) + "</td>" +
+      "<td>" + tags.join(" ") + (coll ? "<div class='muted small'>" + coll + "</div>" : "") +
+      "</td><td>" + (s.checksum_ok ? "✓" : "<span class='tag-po'>✗</span>") + "</td></tr>";
+  }).join("");
+  return "<div class='scrollx'><table class='segs'><thead><tr>" +
+    "<th>帧</th><th>时间(μs)</th><th>序号</th><th>数据长</th><th>标志</th>" +
+    "<th>相对区间</th><th>判定/碰撞证据</th><th>校验</th></tr></thead><tbody>" +
+    rows + "</tbody></table></div>";
+}
+
+function uint32(x) { return (x >>> 0).toString(10); }
+function fmtTs(us) {
+  // 夹具时间为任意基准的微秒，原样显示。
+  return String(us);
+}
+
+(async function init() {
+  await refreshCaptures();
+  await refreshHistory();
+})();
+</script>
+</body>
+</html>
