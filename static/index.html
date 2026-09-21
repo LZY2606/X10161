@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>网络会话重组台</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>网络会话重组台</h1>
+  <div class="sub">离线抓包 / 确定性帧夹具的 TCP 会话重组与证据工作台</div>
+</header>
+
+<main class="layout">
+  <section class="panel upload-panel">
+    <h2>1. 上传夹具</h2>
+    <form id="upload-form">
+      <input type="file" id="file" accept=".json,.pcap,.cap,application/json">
+      <input type="text" id="name" placeholder="数据集名称（可选）">
+      <button type="submit">上传并解析</button>
+    </form>
+    <div id="upload-status" class="status"></div>
+    <div class="dataset-row">
+      <label for="dataset-select">数据集</label>
+      <select id="dataset-select"></select>
+      <button id="refresh-btn" type="button">刷新</button>
+    </div>
+    <div class="actions">
+      <button id="export-btn" type="button">下载证据 JSON 包</button>
+      <button id="pcap-btn" type="button">导出 pcap</button>
+      <label class="import-label">导入证据包
+        <input type="file" id="import-file" accept=".json,application/json">
+      </label>
+    </div>
+  </section>
+
+  <section class="panel config-panel">
+    <h2>2. 分析版本与重叠策略</h2>
+    <div class="config-row">
+      <label for="policy">TCP 重叠策略</label>
+      <select id="policy">
+        <option value="first-seen">first-seen（保留先到字节）</option>
+        <option value="last-seen">last-seen（采用后到字节）</option>
+      </select>
+    </div>
+    <div class="config-row">
+      <label for="timeout">代次空闲超时（秒，0 关闭）</label>
+      <input type="number" id="timeout" value="120" min="0" step="1">
+    </div>
+    <button id="analyze-btn" type="button">生成新分析版本</button>
+    <div id="version-info" class="status"></div>
+    <div class="versions">
+      <h3>历史版本（旧结果不覆盖）</h3>
+      <ul id="version-list"></ul>
+    </div>
+  </section>
+
+  <section class="panel sessions-panel">
+    <h2>3. 会话筛选</h2>
+    <div class="filters">
+      <input type="text" id="filter-text" placeholder="按端点 / 四元组过滤">
+      <select id="filter-state">
+        <option value="">全部关闭原因</option>
+        <option value="fin_graceful">FIN 优雅关闭</option>
+        <option value="reset">RST</option>
+        <option value="superseded">SYN 复用取代</option>
+        <option value="timeout">超时</option>
+        <option value="capture_end">抓包结束</option>
+      </select>
+      <select id="filter-handshake">
+        <option value="">全部握手状态</option>
+        <option value="completed">完整握手</option>
+        <option value="incomplete">握手不完整</option>
+        <option value="partial">中途 partial</option>
+      </select>
+    </div>
+    <table class="session-table">
+      <thead>
+        <tr><th>#</th><th>四元组</th><th>握手</th><th>状态</th><th>帧</th><th>缺口</th><th>重传</th><th>冲突</th></tr>
+      </thead>
+      <tbody id="session-tbody"></tbody>
+    </table>
+  </section>
+
+  <section class="panel detail-panel">
+    <h2>4. 序号空间与片段覆盖</h2>
+    <div id="session-detail" class="detail-empty">选择左侧会话查看详情</div>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>
