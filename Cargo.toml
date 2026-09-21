@@ -1,0 +1,15 @@
+[package]
+name = "gsb-reassembly"
+version = "0.1.0"
+edition = "2021"
+description = "Network session reassembly workbench (offline pcap / deterministic fixtures)"
+
+[lib]
+name = "gsb"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gsb-reassembly"
+path = "src/main.rs"
+
+[dependencies]
