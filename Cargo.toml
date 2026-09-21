@@ -1,0 +1,10 @@
+[package]
+name = "pairwise-gsb"
+version = "0.1.0"
+edition = "2021"
+description = "网络会话重组台: deterministic offline capture reassembly workbench"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
