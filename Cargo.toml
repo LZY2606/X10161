@@ -1,0 +1,15 @@
+[package]
+name = "pairwise-gsb"
+version = "0.1.0"
+edition = "2021"
+description = "离线网络会话重组台：解析简化 pcap / 确定性帧夹具，重组 TCP 会话并输出证据"
+
+[lib]
+name = "pairwise_gsb"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pairwise-gsb"
+path = "src/main.rs"
+
+[dependencies]
