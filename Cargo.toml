@@ -1,0 +1,12 @@
+[package]
+name = "session-reassembly-bench"
+version = "0.1.0"
+edition = "2021"
+description = "离线抓包网络会话重组台：解析 pcap/确定性帧夹具并重组 TCP 会话"
+
+[[bin]]
+name = "session-reassembly-bench"
+path = "src/main.rs"
+
+[profile.release]
+panic = "abort"
