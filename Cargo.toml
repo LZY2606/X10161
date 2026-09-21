@@ -1,0 +1,10 @@
+[package]
+name = "session-reassembly-bench"
+version = "0.1.0"
+edition = "2021"
+description = "网络会话重组台: offline pcap/fixture TCP session reassembly workbench"
+
+[dependencies]
+
+[profile.release]
+opt-level = 2
