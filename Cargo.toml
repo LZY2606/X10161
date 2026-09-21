@@ -1,0 +1,15 @@
+[package]
+name = "pwgsb"
+version = "0.1.0"
+edition = "2021"
+description = "Network session reassembly workbench (offline pcap/fixture only)"
+
+[lib]
+name = "pwgsb"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pwgsb"
+path = "src/main.rs"
+
+[dependencies]

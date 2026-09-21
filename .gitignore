@@ -34,3 +34,6 @@ coverage/
 .vite/
 .turbo/
 *.tsbuildinfo
+
+# 本项目运行时数据（内容寻址 blob / 分析版本）
+/data/

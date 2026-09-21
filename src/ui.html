@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>网络会话重组台</title>
+<style>
+  :root {
+    --bg:#0f1420; --panel:#182033; --panel2:#1f2a44; --text:#e6ecf7;
+    --muted:#93a0bb; --accent:#5aa9ff; --green:#46d18a; --red:#ff6b6b;
+    --amber:#f6c350; --border:#2b3650;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+         background:var(--bg); color:var(--text); font-size:14px; }
+  header { padding:16px 24px; border-bottom:1px solid var(--border);
+           background:linear-gradient(120deg,#14203a,#0f1420); }
+  header h1 { margin:0; font-size:20px; }
+  header p { margin:4px 0 0; color:var(--muted); font-size:12px; }
+  main { display:grid; grid-template-columns: 380px 1fr; gap:16px; padding:16px 24px; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px; }
+  .panel h2 { margin:0 0 10px; font-size:14px; color:var(--accent); }
+  button { background:var(--accent); color:#081322; border:0; border-radius:6px;
+           padding:7px 14px; font-weight:600; cursor:pointer; }
+  button.secondary { background:var(--panel2); color:var(--text); border:1px solid var(--border); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  input,select { background:var(--panel2); color:var(--text); border:1px solid var(--border);
+                 border-radius:6px; padding:7px 9px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  .muted { color:var(--muted); font-size:12px; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var(--panel); }
+  tr.session { cursor:pointer; }
+  tr.session:hover { background:var(--panel2); }
+  tr.session.active { background:#243a63; }
+  .pill { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; }
+  .pill.partial { background:#4a3812; color:var(--amber); }
+  .pill.full { background:#143a26; color:var(--green); }
+  .pill.rst { background:#4a1717; color:var(--red); }
+  .pill.fin { background:#143a26; color:var(--green); }
+  .pill.timeout { background:#332a12; color:var(--amber); }
+  .pill.open { background:#1d2740; color:var(--muted); }
+  .scroll { max-height:520px; overflow:auto; }
+  .dirblock { border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:12px; background:var(--panel2); }
+  .dirblock h3 { margin:0 0 8px; font-size:13px; }
+  .stats { display:flex; flex-wrap:wrap; gap:14px; margin:8px 0; }
+  .stat b { display:block; font-size:16px; }
+  .stat span { color:var(--muted); font-size:11px; }
+  .coverage { position:relative; height:26px; background:#0d1322; border-radius:5px; overflow:hidden; margin:6px 0; }
+  .seg { position:absolute; top:0; bottom:0; background:var(--green); opacity:.85; }
+  .seg.gap { background:repeating-linear-gradient(45deg,#4a1717,#4a1717 4px,#3a1212 4px,#3a1212 8px); }
+  .axis { display:flex; justify-content:space-between; color:var(--muted); font-size:11px; }
+  .events { font-family:ui-monospace,Menlo,monospace; font-size:11.5px; max-height:180px; overflow:auto; }
+  .ev { padding:2px 0; border-bottom:1px dotted var(--border); }
+  .ev .t { color:var(--amber); }
+  .ev .t.retransmission { color:var(--muted); }
+  .ev .t.out_of_order { color:#c49bff; }
+  .ev .t.overlap_bytes,.ev .t.partial_overlap { color:var(--red); }
+  code { background:#0d1322; padding:1px 5px; border-radius:4px; }
+  .empty { color:var(--muted); padding:20px; text-align:center; }
+  a { color:var(--accent); }
+  #toast { position:fixed; right:20px; bottom:20px; background:var(--panel2);
+           border:1px solid var(--border); border-radius:8px; padding:10px 16px;
+           display:none; max-width:360px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>网络会话重组台</h1>
+  <p>离线 pcap / 确定性帧夹具 · TCP 双向流重组 · 序号环绕 · 重传/乱序/缺口证据 · IP 分片隔离</p>
+</header>
+<main>
+  <section>
+    <div class="panel">
+      <h2>1. 上传夹具</h2>
+      <div class="row">
+        <input type="file" id="file">
+        <button id="upload">上传</button>
+      </div>
+      <div class="muted" id="uploadInfo">支持 <code>.json</code> 夹具（pwgsb-fixture/1）或经典 <code>.pcap</code>。原始帧按内容寻址保存。</div>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <h2>2. 分析（新版本不覆盖旧结果）</h2>
+      <div class="row">
+        <label class="muted">夹具</label>
+        <select id="corpus" style="flex:1"></select>
+      </div>
+      <div class="row">
+        <label class="muted">重叠策略</label>
+        <select id="policy">
+          <option value="first-seen">first-seen（先到先得）</option>
+          <option value="last-seen">last-seen（后到覆盖）</option>
+        </select>
+      </div>
+      <div class="row">
+        <label class="muted">空闲超时(ms)</label>
+        <input id="timeout" type="number" value="120000" style="width:130px">
+        <button id="analyze">生成分析版本</button>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <h2>分析版本</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>版本(前12位)</th><th>策略</th><th>会话</th><th>指纹(前8位)</th></tr></thead>
+          <tbody id="analyses"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="secondary" id="downloadEvidence">下载证据 JSON</button>
+        <button class="secondary" id="refresh">刷新</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="panel">
+      <h2>会话列表</h2>
+      <div class="row">
+        <input id="filter" placeholder="筛选：IP / 端口 / 关闭原因" style="flex:1">
+        <span class="muted" id="sessionCount"></span>
+      </div>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>#</th><th>代次</th><th>四元组</th><th>状态</th><th>时间跨度</th></tr></thead>
+          <tbody id="sessions"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:14px" id="detailPanel">
+      <h2>序号空间与片段覆盖</h2>
+      <div id="detail"><div class="empty">选择左侧会话查看每个方向的序号区间、重传、缺口、乱序与最终重组字节。</div></div>
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+<script>
+let currentAnalysis = null;
+let evidence = null;
+let selectedSession = null;
+
+const $ = (id) => document.getElementById(id);
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => (t.style.display = 'none'), 3500);
+}
+
+async function api(path, opts) {
+  const resp = await fetch(path, opts);
+  if (!resp.ok) throw new Error(await resp.text());
+  return resp.json();
+}
+
+async function loadCorpora(selectId) {
+  const list = await api('/api/corpora');
+  const sel = $(selectId);
+  sel.innerHTML = '';
+  if (!list.length) {
+    const o = document.createElement('option');
+    o.textContent = '（尚未上传夹具）';
+    sel.appendChild(o);
+    return;
+  }
+  for (const c of list) {
+    const o = document.createElement('option');
+    o.value = c.id;
+    o.textContent = c.id.slice(0, 12) + ' (' + c.frame_count + ' 帧)';
+    sel.appendChild(o);
+  }
+}
+
+async function loadAnalyses() {
+  const list = await api('/api/analyses');
+  const tb = $('analyses');
+  tb.innerHTML = '';
+  for (const a of list) {
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.innerHTML = '<td>' + a.id.slice(0, 12) + '</td><td>' + a.policy +
+      '</td><td>' + a.session_count + '</td><td><code>' + a.fingerprint.slice(0, 8) +
+      '</code></td>';
+    tr.onclick = () => selectAnalysis(a.id);
+    if (currentAnalysis === a.id) tr.style.background = '#243a63';
+    tb.appendChild(tr);
+  }
+}
+
+async function selectAnalysis(id) {
+  currentAnalysis = id;
+  evidence = await api('/api/analysis/' + id);
+  selectedSession = null;
+  renderSessions();
+  loadAnalyses();
+  $('detail').innerHTML = '<div class="empty">已加载分析版本 ' + id.slice(0, 12) + '，请选择一个会话。</div>';
+}
+
+function endpointText(e) { return e.ip + ':' + e.port; }
+
+function closePill(s) {
+  const cls = s.close_reason;
+  return '<span class="pill ' + cls + '">' +
+    (cls === 'rst' ? 'RST 关闭' : cls === 'fin' ? 'FIN 关闭' :
+     cls === 'timeout' ? '超时关闭' : '未关闭') + '</span>' +
+    (s.started_mid_capture ? ' <span class="pill partial">中途抓取</span>' :
+     ' <span class="pill full">有 SYN</span>');
+}
+
+function renderSessions() {
+  const q = $('filter').value.trim().toLowerCase();
+  const tb = $('sessions');
+  tb.innerHTML = '';
+  const sessions = evidence ? evidence.sessions : [];
+  let shown = 0;
+  for (const s of sessions) {
+    const tuple = endpointText(s.tuple.a) + ' ↔ ' + endpointText(s.tuple.b) +
+      ' g' + s.generation;
+    if (q && !(tuple.toLowerCase().includes(q) || s.close_reason.includes(q))) continue;
+    shown++;
+    const tr = document.createElement('tr');
+    tr.className = 'session' + (selectedSession === s.session_id ? ' active' : '');
+    const span = s.last_ts_ns - s.first_ts_ns;
+    tr.innerHTML = '<td>' + s.session_id + '</td><td>g' + s.generation +
+      (s.started_mid_capture ? ' *' : '') + '</td><td>' + tuple + '</td><td>' +
+      closePill(s) + '</td><td>' + (span / 1e6).toFixed(3) + ' ms</td>';
+    tr.onclick = () => { selectedSession = s.session_id; renderSessions(); renderDetail(s); };
+    tb.appendChild(tr);
+  }
+  $('sessionCount').textContent = shown + ' / ' + sessions.length + ' 个会话';
+}
+
+function renderDir(d) {
+  const lo = d.stream_offset;
+  const hi = lo + d.stream_len;
+  const width = Math.max(1, d.stream_len);
+  const pct = (v) => (((v - lo) / width) * 100).toFixed(2) + '%';
+  let bars = '';
+  for (const [s, e] of d.ranges) {
+    bars += '<div class="seg" style="left:' + pct(s) + ';width:' +
+      (((e - s) / width) * 100).toFixed(2) + '%"></div>';
+  }
+  for (const [s, e] of d.gaps) {
+    bars += '<div class="seg gap" style="left:' + pct(s) + ';width:' +
+      (((e - s) / width) * 100).toFixed(2) + '%"></div>';
+  }
+  const events = (d.events || []).map((ev) => {
+    let extra = '';
+    if (ev.type === 'overlap_bytes') {
+      extra = ' action=' + ev.action + ' kept=' + ev.kept_bytes_hex.slice(0, 24) +
+        (ev.kept_bytes_hex.length > 24 ? '…' : '') + ' incoming=' +
+        ev.incoming_bytes_hex.slice(0, 24) + (ev.incoming_bytes_hex.length > 24 ? '…' : '');
+    }
+    return '<div class="ev"><span class="t ' + ev.type + '">[' + ev.type + ']</span> 帧' +
+      (ev.frame !== undefined ? ev.frame : '') +
+      (ev.range_start !== undefined ? ' 偏移[' + ev.range_start + ',' + ev.range_end + ')' : '') +
+      ' ' + (ev.detail || '') + extra + '</div>';
+  }).join('');
+  return '<div class="dirblock"><h3>方向 ' + d.dir + '：' + endpointText(d.from) +
+    ' → ' + endpointText(d.to) + '</h3>' +
+    '<div class="stats">' +
+      stat(d.base_seq === null ? '—' : d.base_seq, 'data base seq') +
+      stat(d.received_bytes, '到达字节') +
+      stat(d.stream_len, '重组跨度') +
+      stat(d.contiguous_len, '连续字节') +
+      stat(d.retransmissions, '重传段') +
+      stat(d.out_of_order, '乱序段') +
+      stat(d.gaps.length, '缺口') +
+    '</div>' +
+    '<div class="coverage">' + bars + '</div>' +
+    '<div class="axis"><span>' + lo + '</span><span>绿=覆盖 红斜纹=缺口</span><span>' + hi + '</span></div>' +
+    '<div class="row" style="margin-top:8px"><a href="/api/analysis/' + currentAnalysis +
+      '/stream/' + evidence.sessions[selectedSession]?.session_id + '/' + d.dir +
+      '"><button class="secondary">下载重组字节 dir' + d.dir + '.bin</button></a></div>' +
+    '<div class="events">' + (events || '<span class="muted">无事件</span>') + '</div></div>';
+}
+
+function stat(v, label) {
+  return '<div class="stat"><b>' + v + '</b><span>' + label + '</span></div>';
+}
+
+function renderDetail(s) {
+  let html = '<div class="row"><b>会话 #' + s.session_id + ' 代次 g' + s.generation + '</b> ' +
+    closePill(s) +
+    ' <span class="muted">ISN: [' + s.isn.map((x) => (x === null ? '—' : x)).join(', ') + ']</span>' +
+    ' <span class="muted">FIN 帧: [' +
+      s.fin_frame.map((x) => (x === null ? '—' : x)).join(', ') + ']' +
+    (s.rst_frame !== null ? ' RST 帧 ' + s.rst_frame : '') + '</div>';
+  if (s.notes && s.notes.length) {
+    html += '<div class="muted">备注: ' + s.notes.join('；') + '</div>';
+  }
+  html += s.directions.map(renderDir).join('');
+  $('detail').innerHTML = html;
+}
+
+$('upload').onclick = async () => {
+  const f = $('file').files[0];
+  if (!f) return toast('请先选择文件');
+  const buf = await f.arrayBuffer();
+  const resp = await fetch('/api/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: buf,
+  });
+  if (!resp.ok) return toast('导入失败: ' + await resp.text());
+  const j = await resp.json();
+  toast('已导入夹具 ' + j.corpus_id.slice(0, 12) + '，' + j.frame_count + ' 帧');
+  await loadCorpora('corpus');
+  $('corpus').value = j.corpus_id;
+};
+
+$('analyze').onclick = async () => {
+  const corpus = $('corpus').value;
+  if (!corpus) return toast('请先上传夹具');
+  const timeout_ns = Math.round(parseFloat($('timeout').value || '120000') * 1e6);
+  const j = await api('/api/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      corpus_id: corpus,
+      policy: $('policy').value,
+      timeout_ns,
+    }),
+  });
+  toast('分析版本 ' + j.analysis_id.slice(0, 12) + ' 指纹 ' + j.fingerprint.slice(0, 8));
+  await loadAnalyses();
+  selectAnalysis(j.analysis_id);
+};
+
+$('downloadEvidence').onclick = () => {
+  if (!currentAnalysis) return toast('请先选择一个分析版本');
+  window.location = '/api/analysis/' + currentAnalysis + '/evidence.json';
+};
+$('refresh').onclick = async () => { await loadCorpora('corpus'); await loadAnalyses(); };
+$('filter').oninput = () => evidence && renderSessions();
+
+(async function init() {
+  await loadCorpora('corpus');
+  await loadAnalyses();
+})();
+</script>
+</body>
+</html>
