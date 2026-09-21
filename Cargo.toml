@@ -1,0 +1,21 @@
+[package]
+name = "session-reassembly"
+version = "0.1.0"
+edition = "2021"
+description = "网络会话重组台 — offline pcap/fixture TCP session reassembly workbench"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+hex = "0.4"
+
+[lib]
+name = "reasm"
+path = "src/lib.rs"
+
+[[bin]]
+name = "session-reassembly"
+path = "src/main.rs"
