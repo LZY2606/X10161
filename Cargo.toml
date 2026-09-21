@@ -1,0 +1,16 @@
+[package]
+name = "session-reassembly-bench"
+version = "0.1.0"
+edition = "2021"
+description = "Network session reassembly workbench (offline, no packet capture permissions)"
+
+[lib]
+name = "session_reassembly_bench"
+path = "src/lib.rs"
+
+[[bin]]
+name = "session-reassembly-bench"
+path = "src/main.rs"
+
+[profile.release]
+lto = true
