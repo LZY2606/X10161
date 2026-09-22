@@ -1,0 +1,20 @@
+[package]
+name = "pairwise-gsb"
+version = "0.1.0"
+edition = "2021"
+description = "Network session reassembly workbench (offline pcap / deterministic fixtures)"
+
+[lib]
+name = "pairwise_gsb"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pairwise-gsb"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 2
