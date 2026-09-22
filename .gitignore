@@ -34,3 +34,6 @@ coverage/
 .vite/
 .turbo/
 *.tsbuildinfo
+
+# local reassembly workbench data
+.reasm-data/

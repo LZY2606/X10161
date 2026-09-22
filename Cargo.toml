@@ -1,0 +1,9 @@
+[package]
+name = "reasm"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "reasm"
+path = "src/main.rs"
+

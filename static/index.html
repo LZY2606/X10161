@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>网络会话重组台</title>
+<style>
+  :root { --bg:#0f1420; --panel:#171e2e; --panel2:#1f2839; --line:#2b3751;
+    --fg:#e6ebf5; --mut:#93a0b8; --acc:#5db1ff; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif; }
+  header { padding:14px 20px; background:linear-gradient(90deg,#16213a,#0f1420);
+    border-bottom:1px solid var(--line); display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; }
+  header .sub { color:var(--mut); font-size:12px; }
+  .wrap { display:grid; grid-template-columns:360px 1fr; gap:14px; padding:14px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .panel h2 { font-size:13px; margin:0 0 10px; color:var(--mut); text-transform:uppercase; letter-spacing:.08em; }
+  button, select, input[type=text], input[type=number] { background:var(--panel2); color:var(--fg);
+    border:1px solid var(--line); border-radius:7px; padding:7px 10px; font-size:13px; }
+  button { cursor:pointer; }
+  button.primary { background:#1f4d80; border-color:#2f6bb0; }
+  button:hover { border-color:var(--acc); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
+  .muted { color:var(--mut); font-size:12px; }
+  #drop { border:1.5px dashed var(--line); border-radius:10px; padding:18px; text-align:center; color:var(--mut); margin-bottom:10px; }
+  #drop.over { border-color:var(--acc); color:var(--acc); background:#16233c; }
+  .sess { border:1px solid var(--line); border-radius:8px; padding:9px 10px; margin-bottom:8px; cursor:pointer; background:var(--panel2); }
+  .sess:hover { border-color:var(--acc); }
+  .sess.active { border-color:var(--acc); box-shadow:0 0 0 1px var(--acc) inset; }
+  .tag { display:inline-block; font-size:11px; padding:1px 7px; border-radius:20px; margin-right:5px; border:1px solid var(--line); }
+  .st-open,.st-partial { color:var(--warn); border-color:#7a5a17; }
+  .st-fin-closed { color:var(--ok); }
+  .st-rst-closed { color:var(--bad); }
+  .st-timed-out,.st-superseded { color:var(--mut); }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th,td { text-align:left; padding:5px 7px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--mut); font-weight:600; }
+  .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  pre { background:#0c111d; border:1px solid var(--line); border-radius:8px; padding:10px;
+    overflow:auto; max-height:280px; font-size:12px; white-space:pre-wrap; word-break:break-all; }
+  .seqspace { position:relative; height:54px; background:#0c111d; border:1px solid var(--line);
+    border-radius:8px; margin:8px 0 14px; overflow:hidden; }
+  .blk { position:absolute; top:6px; height:18px; border-radius:3px; font-size:10px;
+    overflow:hidden; white-space:nowrap; padding:2px 4px; color:#06121f; }
+  .blk.in { background:#4ade80; }
+  .blk.ooo { background:#fbbf24; }
+  .blk.retx { background:#60a5fa; }
+  .blk.ov { background:#f87171; }
+  .axis { position:absolute; bottom:4px; left:8px; right:8px; height:12px; color:var(--mut); font-size:10px; }
+  .legend span { margin-right:12px; font-size:11px; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:3px; }
+  .tabs { display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; }
+  .tabs button.active { background:#1f4d80; border-color:var(--acc); }
+  .kv { display:grid; grid-template-columns:170px 1fr; gap:3px 12px; font-size:12px; }
+  .kv div:nth-child(odd){ color:var(--mut); }
+  .right { margin-left:auto; display:flex; gap:8px; align-items:center; }
+  .verline { font-size:12px; color:var(--mut); margin-top:8px; word-break:break-all; }
+  details { margin-top:8px; } summary { cursor:pointer; color:var(--acc); }
+</style>
+</head>
+<body>
+<header>
+  <h1>网络会话重组台</h1>
+  <span class="sub">链路层 / IPv4 / IPv6 / TCP · 代次归并 · 32 位环绕 · 离线本地服务</span>
+  <div class="right">
+    <label class="muted">重叠策略
+      <select id="policy">
+        <option value="first-seen">first-seen（先到保留）</option>
+        <option value="last-seen">last-seen（后到覆盖）</option>
+      </select>
+    </label>
+    <label class="muted">超时µs <input id="timeout" type="number" value="2000000" style="width:120px"></label>
+  </div>
+</header>
+<div class="wrap">
+  <div>
+    <div class="panel">
+      <h2>输入夹具 / pcap</h2>
+      <div id="drop">拖放 .pcap 或 JSON 夹具到这里<br><span class="muted">也可选择演示场景</span></div>
+      <div class="row">
+        <input type="file" id="file">
+      </div>
+      <div class="row">
+        <select id="demo"></select>
+        <button id="loadDemo">载入演示</button>
+        <button id="analyzeDemo" class="primary">分析演示</button>
+      </div>
+      <div class="row">
+        <button id="analyzeBtn" class="primary" disabled>分析上传内容</button>
+        <span id="inputInfo" class="muted"></span>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <h2>会话</h2>
+      <div class="row">
+        <input type="text" id="filter" placeholder="筛选 四元组 / 状态 / 代次" style="flex:1">
+      </div>
+      <div id="sessions"></div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <h2>分析版本（不可变）</h2>
+      <div id="versions" class="verline">尚无版本</div>
+    </div>
+  </div>
+
+  <div class="panel" id="detail">
+    <h2>会话详情</h2>
+    <div class="muted">上传或载入演示后，在此查看序号空间、片段覆盖与重组字节。</div>
+  </div>
+</div>
+
+<script>
+let rawBytes = null;
+let rawName = null;
+let result = null;
+let versions = [];
+let activeSess = 0;
+
+const $ = id => document.getElementById(id);
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const t = await r.text();
+  let j; try { j = JSON.parse(t); } catch(e) { j = {error:t}; }
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+
+async function loadDemoList() {
+  const names = await api('/api/demo-list');
+  $('demo').innerHTML = names.map(n => `<option>${n}</option>`).join('');
+}
+async function loadVersions() {
+  versions = await api('/api/versions');
+  $('versions').innerHTML = versions.length ? versions.map(v =>
+    `<div>▣ <a href="#" data-vid="${v.version_id}" class="vlink">${v.version_id.slice(0,18)}…</a>
+      <span class="muted">${v.overlap_policy} fp:${v.fingerprint.slice(0,12)}</span></div>`).join('')
+    : '尚无版本';
+  document.querySelectorAll('.vlink').forEach(a => a.onclick = async (e) => {
+    e.preventDefault();
+    result = await api('/api/version?id=' + encodeURIComponent(a.dataset.vid));
+    render();
+  });
+}
+
+function setInput(bytes, name) {
+  rawBytes = bytes; rawName = name;
+  $('inputInfo').textContent = `${name} · ${bytes.length} 字节`;
+  $('analyzeBtn').disabled = false;
+}
+
+$('file').onchange = async () => {
+  const f = $('file').files[0];
+  if (!f) return;
+  setInput(new Uint8Array(await f.arrayBuffer()), f.name);
+};
+const drop = $('drop');
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', async e => {
+  const f = e.dataTransfer.files[0];
+  if (f) setInput(new Uint8Array(await f.arrayBuffer()), f.name);
+});
+
+$('loadDemo').onclick = async () => {
+  const n = $('demo').value;
+  const txt = await (await fetch('/api/demo?scenario=' + n)).text();
+  setInput(new TextEncoder().encode(txt), 'demo:' + n + '.json');
+};
+
+async function doAnalyze(body, ctype) {
+  const pol = $('policy').value;
+  const to = $('timeout').value;
+  const r = await fetch(`/api/analyze?policy=${pol}&timeout_us=${to}`, {
+    method:'POST', headers: ctype ? {'Content-Type':ctype} : {}, body
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error);
+  result = j;
+  await loadVersions();
+  render();
+}
+$('analyzeBtn').onclick = () => doAnalyze(rawBytes);
+$('analyzeDemo').onclick = async () => { await $('loadDemo').onclick(); await doAnalyze(rawBytes); };
+$('policy').onchange = () => { if (rawBytes) doAnalyze(rawBytes); };
+$('timeout').onchange = () => { if (rawBytes) doAnalyze(rawBytes); };
+$('filter').oninput = renderSessions;
+<script>
+function esc(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+function render() {
+  renderSessions();
+  renderDetail();
+}
+
+function renderSessions() {
+  if (!result) { $('sessions').innerHTML=''; return; }
+  const f = $('filter').value.trim().toLowerCase();
+  const box = $('sessions');
+  box.innerHTML = '';
+  result.sessions.forEach((s, i) => {
+    const text = `${s.four_tuple} ${s.state} gen${s.generation} ${s.endpoints.client}`.toLowerCase();
+    if (f && !text.includes(f)) return;
+    const d0 = s.directions[0], d1 = s.directions[1];
+    const div = document.createElement('div');
+    div.className = 'sess' + (i === activeSess ? ' active' : '');
+    div.innerHTML = `
+      <div><span class="tag st-${s.state}">${s.state}</span>
+        <span class="tag">gen ${s.generation}</span>
+        <span class="tag">IPv${s.ip_version}</span></div>
+      <div class="mono" style="margin-top:4px">${esc(s.four_tuple)}</div>
+      <div class="muted">帧 ${s.start_frame}–${s.end_frame} · 重组 c→s ${d0.reassembled_length}B / s→c ${d1.reassembled_length}B
+        ${s.started_mid_capture ? ' · <span style="color:var(--warn)">中途抓取</span>' : ''}</div>`;
+    div.onclick = () => { activeSess = i; renderSessions(); renderDetail(); };
+    box.appendChild(div);
+  });
+  if (!box.children.length) box.innerHTML = '<div class="muted">无匹配会话</div>';
+}
+
+function seqSpace(s, d, dirIdx) {
+  const segs = s.segments.filter(x => x.direction === dirIdx && x.length > 0);
+  let min = 0, max = d.max_span_end || 1;
+  segs.forEach(x => { min = Math.min(min, x.begin); max = Math.max(max, x.end); });
+  const span = Math.max(1, max - min);
+  const pct = x => ((x - min) / span * 100).toFixed(2);
+  const widthPct = x => Math.max(0.6, (x / span * 100));
+  const blocks = segs.map(x => {
+    let cls = 'in';
+    if (x.relation.startsWith('overlap')) cls = 'ov';
+    else if (x.relation === 'retransmission' || x.relation.startsWith('retransmission')) cls = 'retx';
+    else if (x.relation === 'out-of-order') cls = 'ooo';
+    return `<div class="blk ${cls}" style="left:${pct(x.begin)}%;width:${widthPct(x.end-x.begin)}%"
+      title="帧${x.frame} ${x.relation} [${x.begin},${x.end}) seq=${x.seq_abs}">${x.frame}</div>`;
+  }).join('');
+  return `<div class="seqspace">${blocks}
+    <div class="axis"><span style="float:left">${min}</span><span style="float:right">${max} (frontier=${d.frontier})</span></div></div>`;
+}
+
+function renderDetail() {
+  const el = $('detail');
+  if (!result || !result.sessions.length) {
+    el.innerHTML = '<h2>会话详情</h2><div class="muted">没有会话（可能全是非 IP 帧）。</div>';
+    return;
+  }
+  const s = result.sessions[Math.min(activeSess, result.sessions.length-1)];
+  const meta = result.analysis || {};
+  let html = `<h2>会话详情</h2>
+  <div class="kv">
+    <div>四元组</div><div class="mono">${esc(s.four_tuple)}</div>
+    <div>代次</div><div>${s.generation}（同一四元组第 ${s.generation} 次连接）</div>
+    <div>状态 / 关闭</div><div><span class="tag st-${s.state}">${s.state}</span> ${esc(s.close_reason||'')}</div>
+    <div>握手</div><div>${s.handshake}${s.started_mid_capture?' · 不伪造缺失握手':''}</div>
+    <div>帧区间 / 时间戳</div><div class="mono">${s.start_frame}–${s.end_frame} · ${s.start_ts_us}…${s.last_ts_us} µs</div>
+    <div>分析版本</div><div class="mono">${esc(meta.version_id||'')} ${esc(meta.overlap_policy||'')}</div>
+    <div>指纹</div><div class="mono">${esc(meta.fingerprint||'')}</div>
+  </div>`;
+
+  s.directions.forEach((d, di) => {
+    html += `<h2 style="margin-top:16px">方向 ${di} · ${esc(d.label)}</h2>
+      <div class="legend">
+        <span><i class="dot" style="background:#4ade80"></i>有序</span>
+        <span><i class="dot" style="background:#fbbf24"></i>乱序</span>
+        <span><i class="dot" style="background:#60a5fa"></i>重传</span>
+        <span><i class="dot" style="background:#f87171"></i>重叠冲突</span>
+      </div>
+      ${seqSpace(s, d, di)}
+      <div class="kv">
+        <div>序号区间 (相对ISN)</div><div class="mono">[${d.data_begin}, ${d.max_span_end}) · 重组长度 ${d.reassembled_length}</div>
+        <div>基准 ISN</div><div class="mono">${d.base_isn} ${d.base_from_syn?'(来自SYN 帧'+d.base_frame+')':'<span style="color:var(--warn)">(中途推断, 非SYN 帧'+(d.base_frame??'?')+')</span>'}</div>
+        <div>重传 / 乱序 / 重叠</div><div>${d.retransmissions} / ${d.out_of_order_segments} / ${d.overlap_events}</div>
+        <div>FIN / RST</div><div>${d.fin_seen?'FIN ✓':'—'} / ${d.rst_seen?'RST ✓':'—'}</div>
+        <div>覆盖来源</div><div class="mono" style="word-break:break-all">${d.coverage.map(c=>`帧${c.frame}×${c.length}`).join(' ')}</div>
+      </div>
+      <details open><summary>最终重组字节 (${d.reassembled_length}B)</summary>
+        <pre>${esc(d.data_utf8_lossy)}
+${esc(d.data_hex)}</pre></details>`;
+  });
+
+  const gaps = (result.sessions_gaps || s.gaps || []);
+  html += `<h2 style="margin-top:16px">缺口</h2>`;
+  html += gaps.length ? `<table><tr><th>方向</th><th>起始</th><th>结束</th><th>长度</th></tr>` +
+    gaps.map(g=>`<tr><td>${g.direction}</td><td>${g.begin}</td><td>${g.end}</td><td>${g.length}</td></tr>`).join('') + `</table>`
+    : '<div class="muted">无缺口（或缺口已由乱序片段补齐）。</div>';
+
+  html += `<h2 style="margin-top:16px">片段证据（${s.segments.length}）</h2>
+  <table><tr><th>帧</th><th>方向</th><th>seq</th><th>区间</th><th>标志</th><th>分类</th><th>覆盖</th><th>载荷hex</th></tr>` +
+    s.segments.map(x=>`<tr>
+      <td>${x.frame}</td><td>${x.direction}</td><td class="mono">${x.seq_abs}</td>
+      <td class="mono">[${x.begin},${x.end})</td>
+      <td>${x.flags.join(' ')}</td>
+      <td style="color:${x.conflict?'var(--bad)':'var(--fg)'}">${x.relation}${x.overwritten_bytes?` 覆盖${x.overwritten_bytes}B`:''}</td>
+      <td>${x.length}B</td>
+      <td class="mono" style="max-width:240px;overflow:hidden;text-overflow:ellipsis">${esc(x.payload_hex)}</td>
+    </tr>`).join('') + `</table>`;
+
+  if (result.fragment_notes && result.fragment_notes.length) {
+    html += `<h2 style="margin-top:16px">IP 分片隔离记录</h2>` +
+      result.fragment_notes.map(n=>`<div class="mono" style="color:var(--warn)">帧${n.frame}: ${esc(n.reason)} (${esc(n.fragment_group)})</div>`).join('');
+  }
+
+  html += `<div class="row" style="margin-top:16px">
+    <button onclick="downloadResult()">下载重组结果 JSON</button>
+    <button onclick="downloadEvidence()">下载证据 JSON（精简）</button>
+  </div>`;
+  el.innerHTML = html;
+}
+
+function download(name, text) {
+  const blob = new Blob([text], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+}
+function downloadResult() {
+  download('reassembly-' + (result.analysis.version_id||'result') + '.json', JSON.stringify(result, null, 2));
+}
+function downloadEvidence() {
+  const s = result.sessions[activeSess];
+  const ev = {
+    version_id: result.analysis.version_id,
+    fingerprint: result.analysis.fingerprint,
+    overlap_policy: result.analysis.overlap_policy,
+    four_tuple: s.four_tuple, generation: s.generation, state: s.state,
+    directions: s.directions.map(d => ({
+      label:d.label, base_isn:d.base_isn, base_frame:d.base_frame,
+      base_frame_sha256:d.base_frame_sha256,
+      data_begin:d.data_begin, frontier:d.frontier, max_span_end:d.max_span_end,
+      reassembled_length:d.reassembled_length, data_hex:d.data_hex, coverage:d.coverage,
+      retransmissions:d.retransmissions, out_of_order_segments:d.out_of_order_segments,
+      overlap_events:d.overlap_events,
+    })),
+    gaps: s.gaps,
+    segments: s.segments.map(x => ({
+      frame:x.frame, frame_sha256:x.frame_sha256, direction:x.direction,
+      seq_abs:x.seq_abs, begin:x.begin, end:x.end, flags:x.flags,
+      relation:x.relation, conflict:x.conflict, overwritten_bytes:x.overwritten_bytes,
+      payload_hex:x.payload_hex,
+    })),
+    fragment_notes: result.fragment_notes,
+  };
+  download('evidence-' + (result.analysis.version_id||'evidence') + '.json', JSON.stringify(ev, null, 2));
+}
+
+loadDemoList();
+loadVersions();
+</script>
+</body>
+</html>
