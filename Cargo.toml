@@ -1,0 +1,16 @@
+[package]
+name = "session-reassembly-workbench"
+version = "0.1.0"
+edition = "2021"
+description = "网络会话重组台: offline pcap/fixture TCP session reassembly workbench"
+
+[lib]
+name = "reassembly"
+path = "src/lib.rs"
+
+[[bin]]
+name = "session-reassembly-workbench"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 2
