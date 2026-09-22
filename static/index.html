@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>网络会话重组台</title>
+<style>
+  :root { --bg:#0f1420; --panel:#1a2233; --line:#2c3a55; --fg:#dfe7f5; --dim:#8fa0bd;
+          --acc:#4da3ff; --ok:#3ecf8e; --warn:#ffb454; --bad:#ff6b6b; --gap:#ff6b6b; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+         background:var(--bg); color:var(--fg); }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; gap:16px;
+           align-items:center; flex-wrap:wrap; }
+  h1 { font-size:18px; margin:0; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+           padding:12px 16px; margin:12px 20px; }
+  button, select, input[type=file]::file-selector-button { background:var(--acc); color:#06121f;
+           border:0; border-radius:6px; padding:6px 12px; cursor:pointer; font-weight:600; }
+  button.ghost { background:#2c3a55; color:var(--fg); }
+  input[type=text] { background:#0d1320; color:var(--fg); border:1px solid var(--line);
+           border-radius:6px; padding:6px 10px; }
+  table { border-collapse:collapse; width:100%; }
+  th, td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--line);
+           font-size:13px; }
+  th { color:var(--dim); font-weight:600; }
+  tr.clickable { cursor:pointer; }
+  tr.clickable:hover { background:#223050; }
+  tr.selected { background:#24365c; }
+  .row { display:flex; gap:24px; flex-wrap:wrap; }
+  .col { flex:1 1 420px; min-width:380px; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px;
+         background:#2c3a55; margin-right:4px; }
+  .tag.ok { background:#144d36; color:var(--ok); }
+  .tag.warn { background:#4d3a14; color:var(--warn); }
+  .tag.bad { background:#4d1414; color:var(--bad); }
+  .cov { position:relative; height:22px; background:#0d1320; border:1px solid var(--line);
+         border-radius:4px; margin:6px 0 12px; overflow:hidden; }
+  .cov span { position:absolute; top:0; bottom:0; }
+  .cov .data { background:var(--ok); opacity:.8; }
+  .cov .gap { background:var(--gap); opacity:.8; }
+  .cov .ovl { background:var(--warn); opacity:.9; height:6px; top:auto; }
+  .mono { font-family:ui-monospace,Menlo,monospace; font-size:12px; }
+  .dim { color:var(--dim); }
+  a { color:var(--acc); }
+  h3 { margin:14px 0 6px; font-size:14px; }
+  #msg { color:var(--warn); }
+</style>
+</head>
+<body>
+<header>
+  <h1>网络会话重组台</h1>
+  <span class="dim">离线抓包会话重组 · 不访问实时网卡</span>
+</header>
+
+<div class="panel">
+  <div class="row" style="align-items:center">
+    <input type="file" id="file">
+    <label>重叠策略
+      <select id="policy">
+        <option value="first_seen">first-seen（先到优先）</option>
+        <option value="last_seen">last-seen（后到优先）</option>
+      </select>
+    </label>
+    <button id="uploadBtn">上传并分析</button>
+    <span id="msg"></span>
+  </div>
+</div>
+
+<div class="panel">
+  <h3>分析版本（策略变化生成新版本，旧版本保留）</h3>
+  <table id="analyses"><thead><tr>
+    <th>版本 ID</th><th>名称</th><th>策略</th><th>帧数</th><th>会话数</th><th>指纹</th><th>创建时间</th>
+  </tr></thead><tbody></tbody></table>
+</div>
+
+<div class="panel" id="sessionPanel" style="display:none">
+  <div class="row" style="align-items:center">
+    <h3 style="margin:0">会话列表</h3>
+    <input type="text" id="filter" placeholder="筛选：IP / 端口 / 状态">
+    <span class="dim" id="curFp"></span>
+    <a id="evidenceDl" href="#" download="evidence.json">下载证据 JSON</a>
+    <a id="fixtureDl" href="#" download="fixture.json">导出夹具</a>
+    <label>切换策略重新分析
+      <select id="repolicy">
+        <option value="first_seen">first-seen</option>
+        <option value="last_seen">last-seen</option>
+      </select>
+    </label>
+    <button class="ghost" id="reanalyzeBtn">重新分析</button>
+  </div>
+  <table id="sessions"><thead><tr>
+    <th>#</th><th>端点 A</th><th>端点 B</th><th>代次</th><th>类型</th><th>结束原因</th>
+    <th>A→B 字节</th><th>B→A 字节</th><th>重传</th><th>乱序</th><th>缺口</th><th>重叠</th>
+  </tr></thead><tbody></tbody></table>
+</div>
+
+<div class="panel" id="detailPanel" style="display:none">
+  <h3 id="detailTitle"></h3>
+  <div id="detailBody"></div>
+</div>
+
+<script>
+let currentAnalysis = null;
+let currentResult = null;
+let selectedSession = null;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) {
+    let msg = 'HTTP ' + r.status;
+    try { msg = (await r.json()).error || msg; } catch (e) {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
+async function refreshAnalyses() {
+  const list = await api('/api/analyses');
+  const tb = document.querySelector('#analyses tbody');
+  tb.innerHTML = '';
+  for (const a of list) {
+    const tr = document.createElement('tr');
+    tr.className = 'clickable' + (currentAnalysis === a.id ? ' selected' : '');
+    tr.innerHTML = `<td class="mono">${esc(a.id)}</td><td>${esc(a.name)}</td>
+      <td><span class="tag">${esc(a.policy)}</span></td>
+      <td>${a.frame_count}</td><td>${a.session_count}</td>
+      <td class="mono">${esc(a.fingerprint.slice(0,16))}…</td>
+      <td>${new Date(a.created_unix*1000).toLocaleString()}</td>`;
+    tr.onclick = () => loadAnalysis(a.id);
+    tb.appendChild(tr);
+  }
+}
+
+async function loadAnalysis(id) {
+  currentAnalysis = id;
+  currentResult = await api('/api/analysis/' + id);
+  selectedSession = null;
+  $('sessionPanel').style.display = 'block';
+  $('detailPanel').style.display = 'none';
+  $('curFp').textContent = '指纹 ' + currentResult.fingerprint.slice(0, 16) + '…';
+  $('evidenceDl').href = '/api/analysis/' + id + '/evidence';
+  $('fixtureDl').href = '/api/analysis/' + id + '/fixture';
+  $('repolicy').value = currentResult.config.overlap;
+  renderSessions();
+  refreshAnalyses();
+}
+
+function dirStats(s, d) {
+  const x = s.directions[d];
+  return { bytes: x.byte_count, retrans: x.retransmissions.length,
+           ooo: x.out_of_order.length, gaps: x.gaps.length, ovl: x.overlaps.length };
+}
+
+function renderSessions() {
+  const q = $('filter').value.toLowerCase();
+  const tb = document.querySelector('#sessions tbody');
+  tb.innerHTML = '';
+  for (const s of currentResult.sessions) {
+    const text = `${s.endpoint_a} ${s.endpoint_b} ${s.close_reason} ${s.partial?'partial':''}`.toLowerCase();
+    if (q && !text.includes(q)) continue;
+    const d0 = dirStats(s, 0), d1 = dirStats(s, 1);
+    const tr = document.createElement('tr');
+    tr.className = 'clickable' + (selectedSession === s.id ? ' selected' : '');
+    const kind = s.partial ? '<span class="tag warn">partial</span>'
+                           : '<span class="tag ok">完整</span>';
+    tr.innerHTML = `<td>${s.id}</td><td class="mono">${esc(s.endpoint_a)}</td>
+      <td class="mono">${esc(s.endpoint_b)}</td><td>${s.generation}</td>
+      <td>${kind}</td><td><span class="tag">${esc(s.close_reason)}</span></td>
+      <td>${d0.bytes}</td><td>${d1.bytes}</td>
+      <td>${d0.retrans + d1.retrans}</td><td>${d0.ooo + d1.ooo}</td>
+      <td>${d0.gaps + d1.gaps}</td><td>${d0.ovl + d1.ovl}</td>`;
+    tr.onclick = () => { selectedSession = s.id; renderSessions(); renderDetail(s); };
+    tb.appendChild(tr);
+  }
+}
+
+function covBar(dir) {
+  let maxEnd = 0;
+  for (const iv of dir.intervals) maxEnd = Math.max(maxEnd, iv.offset + iv.len);
+  for (const g of dir.gaps) maxEnd = Math.max(maxEnd, g.offset + g.len);
+  if (maxEnd <= 0) return '<div class="dim">无数据</div>';
+  const pct = v => (v * 100 / maxEnd).toFixed(3) + '%';
+  let html = '<div class="cov">';
+  for (const iv of dir.intervals)
+    html += `<span class="data" style="left:${pct(iv.offset)};width:${pct(iv.len)}"></span>`;
+  for (const g of dir.gaps)
+    html += `<span class="gap" style="left:${pct(g.offset)};width:${pct(g.len)}"></span>`;
+  for (const o of dir.overlaps)
+    html += `<span class="ovl" style="left:${pct(o.offset)};width:${pct(Math.max(o.len, maxEnd/200))}"></span>`;
+  return html + '</div><div class="dim mono">0 — ' + maxEnd + ' 字节（绿=覆盖 红=缺口 黄=重叠）</div>';
+}
+
+function tableRows(head, rows) {
+  if (!rows.length) return '<div class="dim">无</div>';
+  return '<table><thead><tr>' + head.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>'
+    + rows.map(r => '<tr>' + r.map(c => `<td class="mono">${c}</td>`).join('') + '</tr>').join('')
+    + '</tbody></table>';
+}
+
+function renderDetail(s) {
+  $('detailPanel').style.display = 'block';
+  $('detailTitle').textContent =
+    `会话 #${s.id} · ${s.endpoint_a} ⇄ ${s.endpoint_b} · 代次 ${s.generation} · ${s.close_reason}`;
+  const names = ['A → B', 'B → A'];
+  let html = '<div class="row">';
+  s.directions.forEach((d, i) => {
+    html += `<div class="col"><h3>方向 ${names[i]}</h3>
+      <div>ISN: <span class="mono">${d.isn ?? '未知（partial）'}</span>
+      · 锚点序号: <span class="mono">${d.anchor_seq ?? '-'}</span>
+      · 重组字节: <b>${d.byte_count}</b>
+      · SHA-256: <span class="mono">${esc(d.payload_sha256.slice(0,16))}…</span>
+      · <a href="/api/analysis/${currentAnalysis}/payload/${s.id}/${i}"
+           download="session${s.id}_dir${i}.bin">下载重组字节</a></div>
+      ${covBar(d)}
+      <h3>序号区间</h3>${tableRows(['起始序号','结束序号','偏移','长度'],
+        d.intervals.map(v => [v.start_seq, v.end_seq, v.offset, v.len]))}
+      <h3>缺口</h3>${tableRows(['起始序号','结束序号','偏移','长度'],
+        d.gaps.map(v => [v.start_seq, v.end_seq, v.offset, v.len]))}
+      <h3>重传</h3>${tableRows(['序号','长度','帧'],
+        d.retransmissions.map(v => [v.seq, v.len, v.frame]))}
+      <h3>乱序</h3>${tableRows(['序号','长度','帧'],
+        d.out_of_order.map(v => [v.seq, v.len, v.frame]))}
+      <h3>重叠（被覆盖字节保留在证据中）</h3>${tableRows(
+        ['偏移','序号','长度','保留帧','丢弃帧','被覆盖字节(hex)'],
+        d.overlaps.map(v => [v.offset, v.start_seq, v.len, v.kept_frame, v.dropped_frame,
+                             esc(v.dropped_bytes_hex)]))}
+    </div>`;
+  });
+  $('detailBody').innerHTML = html + '</div>';
+}
+
+$('uploadBtn').onclick = async () => {
+  const f = $('file').files[0];
+  if (!f) { $('msg').textContent = '请先选择夹具或 pcap 文件'; return; }
+  $('msg').textContent = '分析中…';
+  try {
+    const r = await api(`/api/upload?policy=${$('policy').value}&name=${encodeURIComponent(f.name)}`,
+                        { method: 'POST', body: f });
+    $('msg').textContent = `完成：版本 ${r.id}，${r.sessions} 个会话`;
+    await loadAnalysis(r.id);
+  } catch (e) { $('msg').textContent = '失败：' + e.message; }
+};
+
+$('reanalyzeBtn').onclick = async () => {
+  if (!currentAnalysis) return;
+  try {
+    const r = await api(`/api/analysis/${currentAnalysis}/reanalyze?policy=${$('repolicy').value}`,
+                        { method: 'POST' });
+    $('msg').textContent = `已生成新版本 ${r.id}（旧版本保留）`;
+    await loadAnalysis(r.id);
+  } catch (e) { $('msg').textContent = '失败：' + e.message; }
+};
+
+$('filter').oninput = renderSessions;
+refreshAnalyses().catch(e => $('msg').textContent = e.message);
+</script>
+</body>
+</html>
